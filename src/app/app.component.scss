@@ -1,0 +1,14 @@
+:host {
+
+  .mode {
+    position: fixed;
+    right: 0;
+    top: 0;
+    margin: 10px;
+    * { margin: 5px; }
+  }
+
+  .mat-form-field {
+    width: 300px;
+  }
+}
