@@ -59,6 +59,14 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   /** Sets the focus on the input's element */
   public focus() { this.element.focus(); }
 
+  public get value(): string { return super.value; }
+
+  public set value(value: string) {
+    console.log('valueChange');
+    // Emits the updated source text
+    this.valueChange.emit(super.value = value);
+  }
+
   // Applies the contentediable attribute unless the input is disabled
   @HostBinding('attr.contenteditable') get editable() { 
     return this.disabled ? undefined : ''; 
@@ -230,7 +238,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       // Uses a promise to postpone the action after all teh current micro-tasks completed
       Promise.resolve().then( () => {
         // Emits the updated source text
-        this.valueChange.emit(this.value);
+        //this.valueChange.emit(this.value);
         // Makes sure to restore the selection after the view has been rendered but anyhow well before
         // the next change will be applied to the data tree (such as while typing) 
         this.apply();
