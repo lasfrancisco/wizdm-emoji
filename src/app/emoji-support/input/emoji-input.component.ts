@@ -93,6 +93,12 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   @Input('required') set requireInput(value: boolean) { this.required = coerceBooleanProperty(value); }
   public required = false; 
 
+  /** Selects the newline mode. 
+   * - None: enter does nothig. 
+   * - Always: enter always inserts a new line. 
+   * - Shift: enter inserts newline in conjunction with the shift key only */
+  @Input() newline: 'none'|'always'|'shift' = 'always';
+
   /** Undo history bouncing time */
   @Input() historyTime: number = 1000;
 
@@ -146,9 +152,11 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       case 'Backspace':
       this.back(); break;
 
-      // Do nothing
-      case 'Enter':
-      this.insert('\n'); break;
+      // Insert a newline according to the newline input mode
+      case 'Enter': if(this.newline === 'always' || (this.newline === 'shift' && ev.shiftKey)) { 
+        this.insert('\n');
+      }
+      break;
 
       // Editing
       default: if(ev.key.length === 1 || this.utils.isEmoji(ev.key) ) {
