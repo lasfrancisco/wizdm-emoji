@@ -1,8 +1,8 @@
 import { Directive, forwardRef, Optional, Self } from '@angular/core';
 import { MatFormField, MatFormFieldControl } from '@angular/material/form-field';
+import { Observable, merge, fromEvent } from 'rxjs';
 import { NgControl } from '@angular/forms';
 import { EmojiInput } from '../input';
-import { Observable, merge, fromEvent } from 'rxjs';
 
 @Directive({
   selector: 'wm-emoji-input[matEmoji]',
@@ -60,12 +60,10 @@ export class EmojiMaterial implements MatFormFieldControl<any> {
   get required(): boolean { return this.input.required; }
 
   /** Whether the `MatFormField` label should try to float. */
-  get shouldLabelFloat(): boolean { 
-    return this.focused || !this.empty; 
-  };
+  get shouldLabelFloat(): boolean { return this.focused || !this.empty; }
 
   /** Whether the control is in an error state. */
-  get errorState(): boolean { return false; };
+  get errorState(): boolean { return !!this.ngControl && !!this.ngControl.errors; }
 
   /** Sets the list of element IDs that currently describe this control. */
   setDescribedByIds(ids: string[]): void { }
@@ -73,5 +71,5 @@ export class EmojiMaterial implements MatFormFieldControl<any> {
   /** Handles a click on the control's container. */
   onContainerClick(event: MouseEvent): void {
     this.input.focus();
-  };
+  }
 }

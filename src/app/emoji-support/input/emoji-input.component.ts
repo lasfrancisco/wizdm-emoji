@@ -9,7 +9,7 @@ import { EmojiUtils } from '../utils';
 
 @Component({
   selector: 'wm-emoji-input',
-  templateUrl: '../text/emoji-text.component.html',
+  templateUrl: './emoji-input.component.html',
   styleUrls: ['./emoji-input.component.scss'],
   encapsulation: ViewEncapsulation.None,
   host: { "class": "wm-emoji-input" }
@@ -111,7 +111,13 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   }
 
   // Handles mouseup event
-  @HostListener('mouseup', ['$event']) onMouseDown(ev: MouseEvent) {
+  @HostListener('mouseup', ['$event']) onMouseUp(ev: MouseEvent) {
+    // Query for the current selection
+    this.query();
+  }
+
+    // Handles mouseup event
+  @HostListener('mousedown', ['$event']) onMouseDown(ev: MouseEvent) {
     // Query for the current selection
     this.query();
   }
@@ -351,7 +357,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     return this;
   }
 
-  /** Restores the current selection back to the dom */ 
+  /** Restores the current selection back to the dom assuming the selection is now collapsed into a cursor */ 
   private apply(): this {
 
     try {
@@ -374,9 +380,17 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     return this;
   }
 
+  /** Forces the cursor position to fall right before or after the emoji image the user clicked onto */
+  public cursorAt(segment: emSegment, at: 'left'|'right') {
+
+    // Updates the current cursor position based on the emoji image the user clicked onto
+    this.start = this.end = this.abs(segment, at === 'right' ? segment.content.length : 0);
+    this.marked = true;
+  }
+
   /** Computes the absolute text offset from the Node/offset dom selection pair */  
   private offset(node: Node, offset: number): number {
-    // Short-circuits for empty nodes
+    // Short-circuits for invalid nodes
     if(!node) { return 0; }
 
     // Case #1: The given node is a text node.
@@ -440,66 +454,71 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       return [ node, offset ];
     }
     
-    // Case #3: The matching node is not a text. An offset means the next node must be selected 
+    // Case #3/4: The matching node is not a text. An offset means the next node must be selected 
     if(offset > 0) { 
 
       // Seeks for the next valid node 
       do { count++; node = node.nextSibling; }
       while(node && node.nodeType !== Node.TEXT_NODE && node.nodeType !== Node.ELEMENT_NODE) ;
 
-      // Case #4: The next node is a text node
+      // Case #3: The next node is a text node
       if(node && node.nodeType === Node.TEXT_NODE) {
         // Returns the starting position of the text node itself 
         return [ node, 0 ];
        }
     }
 
-    // Case #5: The Mathing node (or its the next valid node) is an element, so, returns its position relative to the parent
+    // Case #4: The Mathing node (or its the next valid node) is an element, so, returns its position relative to the parent
     return [ this.element, count ];
   }
 
+  /** Selection helper function. Returns the index of the segment currently representing the given dom node */
   private findIndex(node: Node): number {
-
-    if(!node) { return 0; }
-
-    const first = node.parentNode.firstChild;
-
+    // Short-circuits for invalid nodes
+    if(!node || node.parentNode !== this.element) { return 0; }
+    // Walks back till reaching the very first container's node
     let count = 0;
-    while(node && node !== first) { 
-
+    while(node && node !==  this.element.firstChild) { 
+      // Skips to the previous node
       node = node.previousSibling; 
-
+      // Counts the valid node only
       if(node && (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE)) {
         count++;
       }
     }
-
+    // Returns the counting
     return count;
   }
 
+  /** Selection helper function: Computes teh absolute offset from the given segment and relative offset */
   private abs(segment: emSegment, offset: number = 0): number {
-
+    // Skips invalid segments
     if(!segment) { return 0; }
-
+    // Loops on all teh segments
     for(let seg of this.segments) {
-
+      // Stops when the requested segment matches
       if(segment === seg) { break; }
-      offset += seg.content.length;
+      // Accumulates the offset by the segment's content length
+      offset += (seg.content || '').length;
     }
-
+    // Returns the accumulated offset
     return offset;
   }
 
+  /** Selection helper function: Splits an absolute offset into the index position of the related segment and its relative offset */
   private split(offset: number): [number, number] {
-
+    // Loops on all the segments
     let index = 0;
     for(let seg of this.segments) { 
 
+      // Stops whenever the offset falls into the segment
       if(offset <= (seg.content || '').length) { return [ index, offset ]; }
+      // Decreases the offset by the segment's content length
       offset -= (seg.content || '').length;
+      // Increases the segment indeg
       index++;
     }
-
+    // Returns 0 on no matches found
     return [0, 0];
   }
 
