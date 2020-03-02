@@ -148,7 +148,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
 
       // Do nothing
       case 'Enter':
-      this.enter(ev.shiftKey); break;
+      this.insert('\n'); break;
 
       // Editing
       default: if(ev.key.length === 1 || this.utils.isEmoji(ev.key) ) {
@@ -258,6 +258,13 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     return this.valueChange.emit(this.value = value), value;
   }
 
+  /** Compiles the input text into segment accounting for multiple lines */
+  public compile(source: string): number {
+    // Appends an extra '\n' forcing the browser displaying a new line normally omitted when at the end
+    // On native behavior this just adds an extra char to render while on web behavior dds an extra segment
+    return super.compile(source + (source && source.endsWith('\n') ? '\n' : ''));
+  }
+
   /** Helper function simulalting typing into the input box */
   public typein(key: string) {
     // Whenever focused, queries for the current selection and insert the given key
@@ -278,10 +285,6 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     this.end = (this.start += ins.length);
     // Marks the selection for restoration after rendering 
     this.marked = true;
-  }
-
-  /** Do nothing */
-  public enter(shift?: boolean) {
   }
 
   /** Deletes the current selection (Del-like) */

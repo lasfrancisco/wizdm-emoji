@@ -37,7 +37,7 @@ export class AppComponent {
       } 
 
       return decoded;
-    });
+    }).replace(/\n/g, '\\u0013');
   }
 
   onLoad(ev: Event) {
