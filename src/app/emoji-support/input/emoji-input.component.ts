@@ -82,7 +82,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     }
 
     // Applies the new input value ihnerited by EmojiText
-    this.value = value;
+    this.value = value || '';
   }
   
   /** Disables the input */
