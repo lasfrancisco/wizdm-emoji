@@ -236,12 +236,10 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
 
   // Intercepts inpu changes
   public ngOnChanges(changes: SimpleChanges) {
-
     // Restarts the undo history (this resets teh buffer too)
     if(changes.historyTime || changes.historyLimit) {
       this.enableHistory(this.historyTime, this.historyLimit);
     }
-
     // Compiles the input text into segmetns to be rendered by the base class
     (changes.input || changes.mode) && this.compile(this.value);
   }
@@ -380,6 +378,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   private offset(node: Node, offset: number): number {
     // Short-circuits for empty nodes
     if(!node) { return 0; }
+
     // Case #1: The given node is a text node.
     // This means the dom selection is expressed as the text-node and the relative offset whithin such text
     if(node && node.nodeType === Node.TEXT_NODE) {
@@ -411,37 +410,52 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   /** Computes a Node/offset dom selection pair from an absolute offset */
   private range(start: number): [ Node, number ] {
 
-    // Splits the offset into the index of the relevant compiled segment and a relative offset within the segment's content 
+    // Splits the offset into the index of the relevant segment and a relative offset within the segment's content 
     const [index, offset] = this.split(start);
 
-    const parent = this.element;
-    let node = parent.firstChild;
-
+    // Starts with the first child node of the input's element
+    let node = this.element.firstChild;
+    // Seeks for the relevan node matching the index
     let i = 0;let count = 0;
     while(node) {
-
+      // Counts text nodes and elements only (skips comments)
       if(node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE) {
+        // Stops at the requested index
         if(i === index) { break; }
+        // Increases the searching index otherwise
         i++;
       }
+      // Counts the number of child nodes otherwise (including comments)
       count++;
-
+      // Goes to the next sibling
       node = node.nextSibling;
     }
 
-    if(!node) { return [parent, 0]; }
+    // Case #1: When no matching node is found, returns a 0 based index
+    if(!node) { return [this.element, 0]; }
 
+    // Case #2: When the matching node is a text node...
     if(node.nodeType === Node.TEXT_NODE) {
+      // Returns the text node kind of selection with the content based offset
       return [ node, offset ];
     }
     
+    // Case #3: The matching node is not a text. An offset means the next node must be selected 
     if(offset > 0) { 
 
+      // Seeks for the next valid node 
       do { count++; node = node.nextSibling; }
       while(node && node.nodeType !== Node.TEXT_NODE && node.nodeType !== Node.ELEMENT_NODE) ;
+
+      // Case #4: The next node is a text node
+      if(node && node.nodeType === Node.TEXT_NODE) {
+        // Returns the starting position of the text node itself 
+        return [ node, 0 ];
+       }
     }
 
-    return [ parent, count ];
+    // Case #5: The Mathing node (or its the next valid node) is an element, so, returns its position relative to the parent
+    return [ this.element, count ];
   }
 
   private findIndex(node: Node): number {

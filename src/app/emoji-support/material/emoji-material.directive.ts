@@ -28,7 +28,7 @@ export class EmojiMaterial implements MatFormFieldControl<any> {
     this.stateChanges = merge<void>(
 
       fromEvent(this.input.element, 'blur'),
-      this.input.change
+      this.input.valueChange
     );    
   }
 
