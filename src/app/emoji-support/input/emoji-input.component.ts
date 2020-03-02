@@ -159,7 +159,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       default: if(ev.key.length === 1 || this.utils.isEmoji(ev.key) ) {
 
         // Prevents keyboard repeating giving a chance to Mac's press&hold to work
-        if(ev.repeat) { return false; }
+        if(ev.repeat && this.mac) { return false; }
 
         // Intercepts accelerators
         if(ev.metaKey && this.mac || ev.ctrlKey) {
