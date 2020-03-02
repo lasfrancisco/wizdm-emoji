@@ -551,6 +551,7 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     return this.restore(snapshot);
   }
 
+  /** Restores the input content fromn the given history record */
   private restore(snapshot: { value: string, selection: [number, number] }): this {
 
     this.compile(this.value = snapshot.value);
