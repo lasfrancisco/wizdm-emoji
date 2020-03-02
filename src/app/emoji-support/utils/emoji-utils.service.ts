@@ -47,7 +47,7 @@ export class EmojiUtils {
     return this.filePath + pts.join('-') + this.fileExt;
   }
 
-  public testForEmoji(source: string): boolean {
+  public isEmoji(source: string): boolean {
     return this.regex.test(source);
   }
 

@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, AfterViewChecked, OnInit, OnChanges, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, AfterViewChecked, OnChanges, OnDestroy } from '@angular/core';
 import { HostBinding, HostListener, Inject, ElementRef, ViewEncapsulation, SimpleChanges } from '@angular/core';
 import { coerceBooleanProperty } from '@angular/cdk/coercion';
 import { filter, map, timeInterval } from 'rxjs/operators';
@@ -14,12 +14,16 @@ import { EmojiUtils } from '../utils';
   encapsulation: ViewEncapsulation.None,
   host: { "class": "wm-emoji-input" }
 })
-export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, OnChanges, OnDestroy {
+export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges, OnDestroy {
 
   // Current selection
   private start: number;
   private end: number;
   private marked: boolean;
+
+  constructor(@Inject(DOCUMENT) private document: Document, private root: ElementRef<HTMLElement>, utils: EmojiUtils) {
+    super(utils);
+  }
 
   /** Returns the current selection in the for of start/end offset */
   public get selection(): [number, number] {
@@ -36,83 +40,69 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     return this.root.nativeElement;
   }
 
+  /** The Window object */
   private get window(): Window {
     return this.document.defaultView;
   }
 
+  /** True whenever the platform is Mac, iPhone or iPad */
   private get mac(): boolean {
     const window = this.document.defaultView;
     return /Mac|^iP/.test(window.navigator.platform);
   }
 
-  constructor(@Inject(DOCUMENT) private document: Document, private root: ElementRef<HTMLElement>, utils: EmojiUtils) {
-    super(utils);
+  /** True whenever this input has focus */
+  public get focused(): boolean { 
+    return this.document.activeElement === this.element; 
   }
 
-  public ngOnInit() { this.enableHistory(this.historyTime, this.historyLimit); }
+  /** Sets the focus on the input's element */
+  public focus() { this.element.focus(); }
 
-  public ngAfterViewChecked() {
-    // Applies the current selection to the document when needed. This is essential even when the selection
-    // isn't modified since view changes (aka rendering) affects the selection that requires to be restored
-    if(this.marked) {
-
-      Promise.resolve().then( () => {
-        
-        // Emits the updated source text
-        this.change.emit(this.value);
-
-        // Makes sure to restore the selection after the view has been rendered but anyhow well before
-        // the next change will be applied to the data tree (such as while typing) 
-        this.apply();
-
-        // Resets the flag after the update 
-        this.marked = false; 
-      });
-    }
+  // Applies the contentediable attribute unless the input is disabled
+  @HostBinding('attr.contenteditable') get editable() { 
+    return this.disabled ? undefined : ''; 
   }
 
-  public ngOnChanges(changes: SimpleChanges) {
-
-    if(changes.historyTime || changes.historyLimit) {
-      this.enableHistory(this.historyTime, this.historyLimit);
-    }
-
-    (changes.input || changes.mode) && this.compile(this.value);
-  }
-
-  public ngOnDestroy() { this.clearHistory(); }
-
-  @HostBinding('attr.contenteditable') get editable() { return this.disabled ? undefined : ''; }
-
+  // Marks the input as empty supporting displaying/hiding of the placeholder text
   @HostBinding('class.empty') get showPlaceholder(): boolean {
     return !this.value;
   }
 
-  @Input('value') set input(value: string) {
-
-    if(value !== this.value) { this.enableHistory(this.historyTime, this.historyLimit); }
-
-    this.value = value;
-  }
-
+  /** The placeholder text */
   @HostBinding('attr.placeholder')
   @Input() placeholder: string;
 
+  /** The input value */
+  @Input('value') set input(value: string) {
+
+    // Restarts the undo history whenevevr the input value changes. This test avoids unwanted resets when using bi-directional binding as well
+    if(value !== this.value) { 
+      this.enableHistory(this.historyTime, this.historyLimit); 
+    }
+
+    // Applies the new input value ihnerited by EmojiText
+    this.value = value;
+  }
+  
   /** Disables the input */
   @Input('disabled') set disableInput(value: boolean) { this.disabled = coerceBooleanProperty(value); }
   public disabled = false; 
 
-  /** Disables the input */
+  /** Marks teh input as required */
   @Input('required') set requireInput(value: boolean) { this.required = coerceBooleanProperty(value); }
   public required = false; 
 
+  /** Undo history bouncing time */
   @Input() historyTime: number = 1000;
+
+  /** Undo history limits */
   @Input() historyLimit: number = 128;
 
   /** Emits the new text on changes */
-  @Output() change = new EventEmitter<string>();
+  @Output() valueChange = new EventEmitter<string>();
 
-  /** Prevents insertion from input systems (iOS swipe keyboard and such) */
+  // Handles beforeinput event
   @HostListener('beforeinput', ['$event']) beforeInput(ev: InputEvent) { 
     // Divert the insertion content to the internal implementation
     if(ev.data) { this.query().insert(ev.data); }
@@ -120,11 +110,13 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     return false;
   }
 
+  // Handles mouseup event
   @HostListener('mouseup', ['$event']) onMouseDown(ev: MouseEvent) {
     // Query for the current selection
     this.query();
   }
 
+  // Handles keydown event
   @HostListener('keydown', ['$event']) keyDown(ev: KeyboardEvent) {
 
     // Prevents keyboard repeating giving a chance to Mac's press&hold to work
@@ -140,17 +132,20 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
       case 'Tab': case 'Home': case 'End': case 'PageUp': case 'PageDown':
       return true;
      
+      // Deletes the current selection
       case 'Delete':
       this.del(); break;
       
+      // Deletes back
       case 'Backspace':
       this.back(); break;
 
+      // Do nothing
       case 'Enter':
       this.enter(ev.shiftKey); break;
 
       // Editing
-      default: if(ev.key.length === 1 || this.utils.testForEmoji(ev.key) ) {
+      default: if(ev.key.length === 1 || this.utils.isEmoji(ev.key) ) {
 
         // Intercepts accelerators
         if(ev.metaKey && this.mac || ev.ctrlKey) {
@@ -166,32 +161,52 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     return false;
   }
 
+  /** Handles keayboard accellerators */
+  private keyAccellerators(ev: KeyboardEvent) {
+
+    switch(ev.key) {
+
+      // Ctrl/Cmd Z -> Undo
+      case 'z': case 'Z': 
+      // Reverts to Redo whenever shift is pressed on a Mac
+      if(ev.shiftKey && this.mac) { return this.redo(), false; }
+      // Performs thr Undo
+      return this.undo(), false;
+
+      // Ctrl/Cmd Y -> Redo 
+      case 'y': case 'Y': 
+      // Performs teh Redo unless its a Mac
+      if(!this.mac) { return this.redo(), false; }
+    }
+    // Reverts to default
+    return true;
+  }
+
+  // Handles cut event
   @HostListener('cut', ['$event']) editCut(ev: ClipboardEvent) {
     // Reverts the cut request to copy the content first...
     this.editCopy(ev);
-    // Deletes the selection when succeeded
+    // Deletes the selection
     this.del();
     // Always prevent default
     return false;
   } 
   
+  // Handles copy event
   @HostListener('copy', ['$event']) editCopy(ev: ClipboardEvent) {
-
-    // Gets the clipboard
+    // Gets the clipboard object
     const cp = ev.clipboardData || (this.window as any).clipboardData;
     if(!cp) { return true; }
-    
     // Copies the selected text
     try { cp.setData('text', this.value.slice(this.start, this.end) ); }
     catch(e) { /*console.error(e);*/ }
-
     // Prevents default
     return false;
   }
 
+  // Handles paste event
   @HostListener('paste', ['$event']) editPaste(ev: ClipboardEvent) {
-
-    // Gets the clipboard
+    // Gets the clipboard object
     const cp = (ev.clipboardData || (window as any).clipboardData);
     if(!cp) { return false; }
     // Pastes the data from the clipboard
@@ -201,33 +216,42 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     return false;
   }
 
-  private keyAccellerators(ev: KeyboardEvent) {
-
-    switch(ev.key) {
-
-      case 'z': case 'Z': 
-      
-      if(ev.shiftKey && this.mac) { return this.redo(), false; }
-
-      return this.undo(), false;
-
-      case 'y': case 'Y': 
-      
-      if(!this.mac) { return this.redo(), false; }
+  // Intercepts new renderings
+  public ngAfterViewChecked() {
+    // Applies the current selection to the document when needed. This is essential even when the selection
+    // isn't modified since view changes (aka rendering) affects the selection that requires to be restored
+    if(this.marked) {
+      // Uses a promise to postpone the action after all teh current micro-tasks completed
+      Promise.resolve().then( () => {
+        // Emits the updated source text
+        this.valueChange.emit(this.value);
+        // Makes sure to restore the selection after the view has been rendered but anyhow well before
+        // the next change will be applied to the data tree (such as while typing) 
+        this.apply();
+        // Resets the flag after the update 
+        this.marked = false; 
+      });
     }
-    return true;
   }
 
-  /** True whenever this input has focus */
-  public get focused(): boolean { 
-    return this.document.activeElement === this.element; 
+  // Intercepts inpu changes
+  public ngOnChanges(changes: SimpleChanges) {
+
+    // Restarts the undo history (this resets teh buffer too)
+    if(changes.historyTime || changes.historyLimit) {
+      this.enableHistory(this.historyTime, this.historyLimit);
+    }
+
+    // Compiles the input text into segmetns to be rendered by the base class
+    (changes.input || changes.mode) && this.compile(this.value);
   }
 
-  /** Sets the focus on the input */
-  public focus() { this.element.focus(); }
+  // Clears the history while leaving 
+  public ngOnDestroy() { this.clearHistory(); }
 
+  /** Helper function simulalting typing into the input box */
   public typein(key: string) {
-
+    // Whenever focused, queries for the current selection and insert the given key
     this.focused && this.query().insert(key);
   }
 
@@ -245,6 +269,10 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     this.end = (this.start += ins.length);
     // Marks the selection for restoration after rendering 
     this.marked = true;
+  }
+
+  /** Do nothing */
+  public enter(shift?: boolean) {
   }
 
   /** Deletes the current selection (Del-like) */
@@ -266,10 +294,6 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     this.end = this.start;
     // Marks the selection for restoration after rendering 
     this.marked = true;
-  }
-
-  public enter(shift?: boolean) {
-
   }
 
   /** Deletes the previous character (Backspace-like) */
@@ -318,14 +342,14 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
       const range = (!!sel && sel.rangeCount > 0) && sel.getRangeAt(0);
       if(range) {
         // Computes the start offset
-        this.start = this.match(range.startContainer, range.startOffset);
+        this.start = this.offset(range.startContainer, range.startOffset);
         // Computes the end offset
-        this.end = range.collapsed ? this.start : this.match(range.endContainer, range.endOffset);
+        this.end = range.collapsed ? this.start : this.offset(range.endContainer, range.endOffset);
       }
       else { this.start = this.end = 0; }
     }
     catch(e) { this.start = this.end = 0; /*console.error(e);*/ }
-
+    // Returns this for chaining purposes
     return this;
   }
 
@@ -348,71 +372,46 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
       sel.addRange(range);
     }
     catch(e) {}
-
+    // Returns this for chaining purposes
     return this;
   }
 
-  private match(node: Node, offset: number): number {
-
+  /** Computes the absolute text offset from the Node/offset dom selection pair */  
+  private offset(node: Node, offset: number): number {
+    // Short-circuits for empty nodes
     if(!node) { return 0; }
-
-    const findIndex = (node: Node) => {
-
-      if(!node) { return 0; }
-
-      const first = node.parentNode.firstChild;
-
-      let count = 0;
-      while(node && node !== first) { 
-
-        node = node.previousSibling; 
-
-        if(node && (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE)) {
-          count++;
-        }
-      }
-
-      return count;
-    }
-
+    // Case #1: The given node is a text node.
+    // This means the dom selection is expressed as the text-node and the relative offset whithin such text
     if(node && node.nodeType === Node.TEXT_NODE) {
-      return this.offset(this.segments[findIndex(node)], offset );
+      // Computes the absolute offset from the matching segment
+      return this.abs(this.segments[ this.findIndex(node) ], offset );
     }
-    else {
 
-      node = node && node.childNodes.item(Math.min(offset, node.childNodes.length - 1));
+    // Cases #2/3: The given node is an Element (must be the host container)
+    // This means the dom selection is expressed as the containing node while the offseet is the index of 
+    // the selected element, so, gets the selected child node first (saturating to the last child)
+    node = node && node.childNodes.item(Math.min(offset, node.childNodes.length - 1));
 
-      if(node && node.nodeType !== Node.ELEMENT_NODE) {
-
-        while(node && node.nodeType !== Node.ELEMENT_NODE) {
-          node = node.previousSibling;
-        }
-
-        const segment = this.segments[findIndex(node)];
-        return this.offset(segment, segment && segment.content.length);
+    // Case #2: The selected child node is not an element (likely a comment)
+    if(node && node.nodeType !== Node.ELEMENT_NODE) {
+      // Walk back till the first element is found
+      while(node && node.nodeType !== Node.ELEMENT_NODE) {
+        node = node.previousSibling;
       }
-
-      return this.offset(this.segments[findIndex(node)], 0);
+      // When found, computes the absolute offset fromn the matching segment using its content's lenght as the offset
+      const segment = this.segments[this.findIndex(node)];
+      return this.abs(segment, segment && segment.content.length);
     }
 
-    return 0 as never;
+    // Case #3: The selected child node is an element (likely an image)
+    // Computes the absolute offset from the matching segment straight away
+    return this.abs(this.segments[this.findIndex(node)], 0);    
   }
 
-  private offset(segment: emSegment, offset: number = 0): number {
-
-    if(!segment) { return 0; }
-
-    for(let seg of this.segments) {
-
-      if(segment === seg) { break; }
-      offset += seg.content.length;
-    }
-
-    return offset;
-  }
-
+  /** Computes a Node/offset dom selection pair from an absolute offset */
   private range(start: number): [ Node, number ] {
 
+    // Splits the offset into the index of the relevant compiled segment and a relative offset within the segment's content 
     const [index, offset] = this.split(start);
 
     const parent = this.element;
@@ -443,6 +442,38 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     }
 
     return [ parent, count ];
+  }
+
+  private findIndex(node: Node): number {
+
+    if(!node) { return 0; }
+
+    const first = node.parentNode.firstChild;
+
+    let count = 0;
+    while(node && node !== first) { 
+
+      node = node.previousSibling; 
+
+      if(node && (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE)) {
+        count++;
+      }
+    }
+
+    return count;
+  }
+
+  private abs(segment: emSegment, offset: number = 0): number {
+
+    if(!segment) { return 0; }
+
+    for(let seg of this.segments) {
+
+      if(segment === seg) { break; }
+      offset += seg.content.length;
+    }
+
+    return offset;
   }
 
   private split(offset: number): [number, number] {

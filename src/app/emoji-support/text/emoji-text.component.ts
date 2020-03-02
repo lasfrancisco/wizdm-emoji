@@ -75,5 +75,4 @@ export class EmojiText implements OnChanges {
 
     return this.segments.length;
   }
-
 }
