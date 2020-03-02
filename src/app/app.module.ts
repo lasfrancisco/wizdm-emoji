@@ -24,7 +24,7 @@ import { EmojiMaterialModule } from './emoji-support/material';
     MatRadioModule,
     MatButtonModule,
     MatFormFieldModule,
-    EmojiSupportModule.init( { filePath: "https://cdn.jsdelivr.net/npm/emoji-datasource-google@5.0.1/img/google/64/" }),
+    EmojiSupportModule.init( { emojiPath: "https://cdn.jsdelivr.net/npm/emoji-datasource-google@5.0.1/img/google/64/" }),
     EmojiImageModule,
     EmojiTextModule,
     EmojiInputModule,

@@ -1,5 +1,5 @@
 import { Component, OnChanges, SimpleChanges, Input, Inject } from '@angular/core';
-import { EmojiRegex, EmojiNative } from '../utils';
+import { EmojiUtils } from '../utils';
 
 export interface emSegment {
   type: 'text'|'emoji';
@@ -15,7 +15,7 @@ export class EmojiText implements OnChanges {
 
   readonly segments: emSegment[] = [];
 
-  constructor(@Inject(EmojiRegex) protected regex: RegExp, @Inject(EmojiNative) protected native: boolean) { }
+  constructor(readonly utils: EmojiUtils) { }
 
   /** Plain text source input */
   @Input('wm-emoji-text') value: string;
@@ -29,13 +29,13 @@ export class EmojiText implements OnChanges {
 
   /** Behavior flag either returning 'web' or 'native' depending on the current behavior */
   get behavior(): 'native'|'web' {
-    return this.mode === 'auto' ? (this.native ? 'native' : 'web') : this.mode;
+    return this.mode === 'auto' ? (this.utils.native ? 'native' : 'web') : this.mode;
   }
 
   public ngOnChanges(changes: SimpleChanges) {
     
     // Compiles the source text into segments
-    this.compile(this.value); 
+    (changes.value || changes.mode) && this.compile(this.value); 
   }
 
   // Tracking function to render the segments by content preventing re-rendering segments where content is unchanged
@@ -56,7 +56,7 @@ export class EmojiText implements OnChanges {
     // Resets the start index
     let start = 0;
     // Parses the source text for emoji unicode sequences
-    this.parse(source, (match, index) => {
+    this.utils.parseEmojiCodes(source, (match, index) => {
        // Pushes the text preceeding the match 
       if(index > start){ 
         const content = source.substring(start, index);
@@ -76,20 +76,4 @@ export class EmojiText implements OnChanges {
     return this.segments.length;
   }
 
-  /** Parses the source text searching for emoji unicode sequences */
-  private parse(source: string, callbackfn: (match: string, index: number) => void) {
-
-    if(typeof callbackfn !== 'function') {
-      throw new Error('Callback must be a funciton');
-    }
-
-    // Resets the starting position
-    this.regex.lastIndex = 0;
-
-    // Loop on RegExp matches
-    let match;
-    while(match = this.regex.exec(source)) {
-      callbackfn(match[0], match.index);
-    }
-  }
 }

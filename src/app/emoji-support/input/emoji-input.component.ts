@@ -2,10 +2,10 @@ import { Component, Input, Output, EventEmitter, AfterViewChecked, OnInit, OnCha
 import { HostBinding, HostListener, Inject, ElementRef, ViewEncapsulation, SimpleChanges } from '@angular/core';
 import { coerceBooleanProperty } from '@angular/cdk/coercion';
 import { filter, map, timeInterval } from 'rxjs/operators';
-import { EmojiRegex, EmojiNative } from '../utils';
 import { EmojiText, emSegment } from '../text';
 import { Subject, Subscription } from 'rxjs';
 import { DOCUMENT } from '@angular/common';
+import { EmojiUtils } from '../utils';
 
 @Component({
   selector: 'wm-emoji-input',
@@ -45,15 +45,13 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     return /Mac|^iP/.test(window.navigator.platform);
   }
 
-  constructor(@Inject(DOCUMENT) private document: Document, private root: ElementRef<HTMLElement>,
-              @Inject(EmojiRegex) regex: RegExp, @Inject(EmojiNative) native: boolean) {
-                
-    super(regex, native);
+  constructor(@Inject(DOCUMENT) private document: Document, private root: ElementRef<HTMLElement>, utils: EmojiUtils) {
+    super(utils);
   }
 
-  ngOnInit() { this.enableHistory(this.historyTime, this.historyLimit); }
+  public ngOnInit() { this.enableHistory(this.historyTime, this.historyLimit); }
 
-  ngAfterViewChecked() {
+  public ngAfterViewChecked() {
     // Applies the current selection to the document when needed. This is essential even when the selection
     // isn't modified since view changes (aka rendering) affects the selection that requires to be restored
     if(this.marked) {
@@ -65,7 +63,7 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
 
         // Makes sure to restore the selection after the view has been rendered but anyhow well before
         // the next change will be applied to the data tree (such as while typing) 
-        this.restore();
+        this.apply();
 
         // Resets the flag after the update 
         this.marked = false; 
@@ -73,17 +71,16 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     }
   }
 
-  ngOnChanges(changes: SimpleChanges) {
+  public ngOnChanges(changes: SimpleChanges) {
 
     if(changes.historyTime || changes.historyLimit) {
       this.enableHistory(this.historyTime, this.historyLimit);
     }
 
-    // Calls the supr version when needed
-    (changes.value || changes.mode) && super.ngOnChanges(changes);
+    (changes.input || changes.mode) && this.compile(this.value);
   }
 
-  ngOnDestroy() { this.clearHistory(); }
+  public ngOnDestroy() { this.clearHistory(); }
 
   @HostBinding('attr.contenteditable') get editable() { return this.disabled ? undefined : ''; }
 
@@ -92,6 +89,9 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
   }
 
   @Input('value') set input(value: string) {
+
+    if(value !== this.value) { this.enableHistory(this.historyTime, this.historyLimit); }
+
     this.value = value;
   }
 
@@ -126,6 +126,10 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
   }
 
   @HostListener('keydown', ['$event']) keyDown(ev: KeyboardEvent) {
+
+    // Prevents keyboard repeating giving a chance to Mac's press&hold to work
+    if(ev.repeat) { return false; }
+
     // Query for the current selection
     this.query();
 
@@ -146,7 +150,7 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
       this.enter(ev.shiftKey); break;
 
       // Editing
-      default: if(ev.key.length === 1 || this.regex.test(ev.key) ) {
+      default: if(ev.key.length === 1 || this.utils.testForEmoji(ev.key) ) {
 
         // Intercepts accelerators
         if(ev.metaKey && this.mac || ev.ctrlKey) {
@@ -287,8 +291,7 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
   private next(pos: number): number { 
     // Moving ahead requires to jump one or more character depending on the letngh of the emoji, if any.
     // So, search for a match with an emoij, first
-    this.regex.lastIndex = 0;
-    const match = this.regex.exec(this.value.slice(pos));
+    const match = this.utils.matchEmojiCodes(this.value.slice(pos));
     // Updates teh position accordingly
     return pos + ((match && match.index === 0) ? match[0].length : 1); 
   }
@@ -327,7 +330,7 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
   }
 
   /** Restores the current selection back to the dom */ 
-  private restore(): this {
+  private apply(): this {
 
     try {
       // Gets the document selection object first
@@ -530,7 +533,7 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     // Gets the latest snapshot from the history
     const snapshot = this.history[++this.timeIndex];
     // Reloads the snapshot's content restoring the selection too
-    return this.apply(snapshot);
+    return this.restore(snapshot);
   }
 
   /** Returns true whenever the last undone modifications can be redone */
@@ -545,10 +548,10 @@ export class EmojiInput extends EmojiText implements OnInit, AfterViewChecked, O
     // Removes the newest snapshot when back to the present
     if(this.timeIndex === 0) { this.history.shift(); }
     // Reloads the snapshot's content restoring the selection too
-    return this.apply(snapshot);
+    return this.restore(snapshot);
   }
 
-  private apply(snapshot: { value: string, selection: [number, number] }): this {
+  private restore(snapshot: { value: string, selection: [number, number] }): this {
 
     this.compile(this.value = snapshot.value);
     [this.start, this.end] = snapshot.selection;

@@ -22,7 +22,7 @@
               "src/favicon.ico",
               "src/assets",
               { 
-                "glob": "**/*", 
+                "glob": "*.png", 
                 "input": "./node_modules/emoji-datasource-google/img/google/64", 
                 "output": "/assets/emoji/" 
               }

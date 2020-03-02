@@ -1,6 +1,6 @@
 import { InjectionToken, inject } from '@angular/core';
-import { DOCUMENT } from '@angular/common';
 import emojiRegexFactory from 'emoji-regex/es2015';
+import { DOCUMENT } from '@angular/common';
 
 export const EmojiRegex = new InjectionToken<RegExp>('wizdm-emoji-regex', {
   providedIn: 'root',
