@@ -59,13 +59,6 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   /** Sets the focus on the input's element */
   public focus() { this.element.focus(); }
 
-  public get value(): string { return super.value; }
-
-  public set value(value: string) {
-    console.log('valueChange');
-    // Emits the updated source text
-    this.valueChange.emit(super.value = value);
-  }
 
   // Applies the contentediable attribute unless the input is disabled
   @HostBinding('attr.contenteditable') get editable() { 
@@ -88,9 +81,8 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     if(value !== this.value) { 
       this.enableHistory(this.historyTime, this.historyLimit); 
     }
-
     // Applies the new input value ihnerited by EmojiText
-    this.value = value || '';
+    this.updateValue(value);
   }
   
   /** Disables the input */
@@ -261,6 +253,11 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   // Clears the history while leaving 
   public ngOnDestroy() { this.clearHistory(); }
 
+  public updateValue(value: string) {
+    // Emits the updated source text
+    return this.valueChange.emit(this.value = value), value;
+  }
+
   /** Helper function simulalting typing into the input box */
   public typein(key: string) {
     // Whenever focused, queries for the current selection and insert the given key
@@ -276,7 +273,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     // Insert the new text at the current position  
     const text = this.value.slice(0, this.start) + ins + this.value.slice(this.start);
     // Updates the source and compiles the segment for rendering 
-    this.compile(this.value = text);
+    this.compile(this.updateValue(text));
     // Updates the cursor position
     this.end = (this.start += ins.length);
     // Marks the selection for restoration after rendering 
@@ -301,7 +298,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     // Removes the selected text
     const text = this.value.slice(0, this.start) + this.value.slice(this.end);
     // Updates the source and compiles the segment for rendering 
-    this.compile(this.value = text);
+    this.compile(this.updateValue(text));
     // Collapses the selection
     this.end = this.start;
     // Marks the selection for restoration after rendering 
@@ -626,7 +623,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   /** Restores the input content fromn the given history record */
   private restore(snapshot: { value: string, selection: [number, number] }): this {
 
-    this.compile(this.value = snapshot.value);
+    this.compile(this.updateValue(snapshot.value));
     [this.start, this.end] = snapshot.selection;
     this.marked = true;
     return this;
