@@ -38,7 +38,8 @@
  
   <div fxLayout="row" style="user-select: none;"> 
     <button mat-icon-button tabindex="-1" *ngFor="let key of keys" (mousedown)="typein(key);false" style="font-size: 24px; line-height: 24px;">
-      <img [wm-emoji]="key" />
+      <span *ngIf="message.behavior === 'native'; else emojiImg">{{ key }}</span>  
+      <ng-template #emojiImg><img [wm-emoji]="key" /></ng-template>
     </button>
   </div>
 
