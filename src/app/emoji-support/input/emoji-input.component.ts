@@ -404,6 +404,21 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     this.marked = true;
   }
 
+  /** Selection helper function: Computes the absolute offset from the given segment and relative offset */
+  private abs(segment: emSegment, offset: number = 0): number {
+    // Skips invalid segments
+    if(!segment) { return 0; }
+    // Loops on all teh segments
+    for(let seg of this.segments) {
+      // Stops when the requested segment matches
+      if(segment === seg) { break; }
+      // Accumulates the offset by the segment's content length
+      offset += (seg.content || '').length;
+    }
+    // Returns the accumulated offset
+    return offset;
+  }
+
   /** Computes the absolute text offset from the Node/offset dom selection pair */  
   private offset(node: Node, offset: number): number {
     // Short-circuits for invalid nodes
@@ -411,13 +426,11 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
 
     // Case #1: The given node is a text node, meaning the dom selection is expressed as the text-node and the relative offset whithin such text. We keep the pair unchanged and move forward.
     if(node.nodeType !== Node.TEXT_NODE) {
-
       // Cases #2: The given node isn't a text node (likely is the host container element), meaning the dom selection is expressed as the containing node while the offseet is the index of the selected element.
-
+      
       // Ensures the given node has chilldren
       const count = node.childNodes.length;
       if(!count) { return 0; }
-
       // Gets the selected child node (saturating to the last child) and resets the offset for the furtner calculations
       node = node.childNodes.item(Math.min(offset, count-1));
       offset = 0;
@@ -426,28 +439,10 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     // Loops on the nodes composing the rendered output
     let child = this.element.firstChild; let text = ''; 
     while(child) {
-
       // When we match the requested node, we are done. The offset is calculated as the accumulated text length.
       if(child == node) { return text.length + offset; } 
-
       // Appends the text content depending on the node type
-      switch(child.nodeType) {
-
-        // Appends the text node value
-        case Node.TEXT_NODE:
-        text += child.nodeValue;
-        break;
-
-        // Appends the alt image element value
-        case Node.ELEMENT_NODE:
-        switch((child as Element).tagName) {
-
-          case 'IMG':
-          text += (child as HTMLImageElement).alt || '';
-          break;
-        }
-      }
-
+      text += this.nodeText(child);
       // Skips to the next node
       child = child.nextSibling;
     }
@@ -456,23 +451,18 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   }
 
   /** Computes a Node/offset dom selection pair from an absolute offset */
-  private range(start: number): [ Node, number ] {
-
-    // Splits the offset into the index of the relevant segment and a relative offset within the segment's content 
-    const [index, offset] = this.split(start);
-
+  private range(offset: number): [ Node, number ] {
     // Starts with the first child node of the input's element
     let node = this.element.firstChild;
     // Seeks for the relevan node matching the index
-    let i = 0;let count = 0;
+    let count = 0; 
     while(node) {
-      // Counts text nodes and elements only (skips comments)
-      if(node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE) {
-        // Stops at the requested index
-        if(i === index) { break; }
-        // Increases the searching index otherwise
-        i++;
-      }
+      // Gets the node text content, if any 
+      const text = this.nodeText(node);
+      // When the offset fits within the node we are done
+      if(offset <= text.length) { break; }
+      // Decreses the absolute offset
+      offset -= text.length;
       // Counts the number of child nodes otherwise (including comments)
       count++;
       // Goes to the next sibling
@@ -480,7 +470,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     }
 
     // Case #1: When no matching node is found, returns a 0 based index
-    if(!node) { return [this.element, 0]; }
+    if(!node) { return [ this.element, 0 ]; }
 
     // Case #2: When the matching node is a text node...
     if(node.nodeType === Node.TEXT_NODE) {
@@ -506,36 +496,26 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     return [ this.element, count ];
   }
 
-  /** Selection helper function: Computes teh absolute offset from the given segment and relative offset */
-  private abs(segment: emSegment, offset: number = 0): number {
-    // Skips invalid segments
-    if(!segment) { return 0; }
-    // Loops on all teh segments
-    for(let seg of this.segments) {
-      // Stops when the requested segment matches
-      if(segment === seg) { break; }
-      // Accumulates the offset by the segment's content length
-      offset += (seg.content || '').length;
-    }
-    // Returns the accumulated offset
-    return offset;
-  }
+  /** Returns the text associated with the given node */
+  private nodeText(node: Node): string {
+          
+    switch(node.nodeType) {
 
-  /** Selection helper function: Splits an absolute offset into the index position of the related segment and its relative offset */
-  private split(offset: number): [number, number] {
-    // Loops on all the segments
-    let index = 0;
-    for(let seg of this.segments) { 
+      // The value of the tetxt node
+      case Node.TEXT_NODE:
+      return node.nodeValue;
+      break;
 
-      // Stops whenever the offset falls into the segment
-      if(offset <= (seg.content || '').length) { return [ index, offset ]; }
-      // Decreases the offset by the segment's content length
-      offset -= (seg.content || '').length;
-      // Increases the segment indeg
-      index++;
+      // The alt of an image element
+      case Node.ELEMENT_NODE:
+      switch((node as Element).tagName) {
+
+        case 'IMG':
+        return (node as HTMLImageElement).alt || '';
+        break;
+      }
     }
-    // Returns 0 on no matches found
-    return [0, 0];
+    return '';
   }
 
   /***** HISTORY UNDO/REDO *****/
