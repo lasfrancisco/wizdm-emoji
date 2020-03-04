@@ -25,11 +25,6 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     super(utils);
   }
 
-  /** Returns the current selection in the for of start/end offset */
-  public get selection(): [number, number] {
-    return [ this.start, this.end ];
-  }
-
   /** True whenever the curernt selection is collapsed in a cursor */
   public get collapsed(): boolean {
     return this.start === this.end;
@@ -51,15 +46,6 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     return /Mac|^iP/.test(window.navigator.platform);
   }
 
-  /** True whenever this input has focus */
-  public get focused(): boolean { 
-    return this.document.activeElement === this.element; 
-  }
-
-  /** Sets the focus on the input's element */
-  public focus() { this.element.focus(); }
-
-
   // Applies the contentediable attribute unless the input is disabled
   @HostBinding('attr.contenteditable') get editable() { 
     return this.disabled ? undefined : ''; 
@@ -75,14 +61,20 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   @Input() placeholder: string;
 
   /** The input value */
-  @Input('value') set input(value: string) {
+  get value(): string { return super.value; }
+  @Input() set value(value: string) {
 
     // Restarts the undo history whenevevr the input value changes. This test avoids unwanted resets when using bi-directional binding as well
-    if(value !== this.value) { 
+    if(value !== super.value) { 
       this.enableHistory(this.historyTime, this.historyLimit); 
     }
     // Applies the new input value ihnerited by EmojiText
     this.updateValue(value);
+  }
+
+  private updateValue(value: string) {
+    // Emits the updated source text
+    return this.valueChange.emit(super.value = value), value;
   }
   
   /** Disables the input */
@@ -255,32 +247,105 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       this.enableHistory(this.historyTime, this.historyLimit);
     }
     // Compiles the input text into segmetns to be rendered by the base class
-    (changes.input || changes.mode) && this.compile(this.value);
+    (changes.value || changes.mode) && this.compile(this.value);
   }
 
   // Clears the history while leaving 
   public ngOnDestroy() { this.clearHistory(); }
 
-  public updateValue(value: string) {
-    // Emits the updated source text
-    return this.valueChange.emit(this.value = value), value;
+  /********** HTMLInputElement compatibility features ***********/
+
+  /** Returns / Sets the beginning index of the selected text. */
+  public get selectionStart(): number { return this.start; }
+  public set selectionStart(start: number) { this.start = start; this.marked = true; }
+
+  public get selectionEnd(): number { return this.end; }
+  public set selectionEnd(end: number) { this.end = end; this.marked = true; }
+
+  public get selectionDirection(): 'forward'|'backward'|'none' { return 'none'; }
+  public set selectionDirection(dir: 'forward'|'backward'|'none') {}
+
+  /** True whenever this input has focus */
+  public get focused(): boolean { 
+    return this.document.activeElement === this.element; 
   }
 
+  /** Sets the focus on the input's element */
+  public focus() { this.element.focus(); }
+
+  /** Removes focus from the input's element; keystrokes will subsequently go nowhere. */
+  public blur() { this.element.blur(); }
+
+  /** Selects all the text in the input element, and focuses it so the user can subsequently replace all of its content.  */
+  public select() { this.setSelectionRange(0, this.value.length - 1); this.focus(); }
+
+  /** Selects a range of text in the input element (but does not focus it).  */
+  public setSelectionRange(start: number, end: number, dir?: 'forward'|'backward'|'none') {
+
+    switch(dir || 'none') {
+
+      case 'forward':
+      this.start = Math.min(start, end);
+      this.end = Math.max(start, end);
+      break;
+
+      case 'backward':
+      this.start = Math.max(start, end);
+      this.end = Math.min(start, end);
+      break;
+
+      case 'none': default:
+      this.start = start;
+      this.end = end;
+    }
+
+    this.marked = true;
+  }
+
+  /** Replaces a range of text in the input with a new string. */
+  public setRangeText(replacement: string, start?: number, end?: number, selectMode?: 'select'|'start'|'end'|'preserve') {
+
+    // Applies the requested selection whenever defined
+    if(typeof start !== 'undefined') { this.start = start; }
+    if(typeof end !== 'undefined') { this.end = end; }
+
+    // Backs-up the selection
+    const sel = [ this.start, this.end ];
+
+    // Replaces the text at the current selection
+    this.insert(replacement);
+
+    // Restores the selection according to the requested mode
+    switch(selectMode || 'start') {
+
+      case 'start':
+      this.start = this.end = sel[0];
+      break;
+
+      case 'select':
+      this.end = (this.start = sel[0]) + (replacement || '').length;
+      break;
+
+      case 'preserve':
+      [ this.start, this.end ] = sel;
+      break;
+
+      case 'end': default:
+      // Do nothing - this.start = this.end = sel[0] + (replacement || '').length;
+    }
+  }
+
+  /********** INTERNALS ***********/
+
   /** Compiles the input text into segment accounting for multiple lines */
-  public compile(source: string): number {
+  protected compile(source: string): number {
     // Appends an extra '\n' forcing the browser displaying a new line normally omitted when at the end
     // On native behavior this just adds an extra char to render while on web behavior dds an extra segment
     return super.compile(source + (source && source.endsWith('\n') ? '\n' : ''));
   }
 
-  /** Helper function simulalting typing into the input box */
-  public typein(key: string) {
-    // Whenever focused, queries for the current selection and insert the given key
-    this.focused && this.query().insert(key);
-  }
-
   /** Insert a new text at the current cursor position */
-  public insert(ins: string) {
+  private insert(ins: string): this {
     // Stores the current values in history
     this.store();
     // Deletes the selection, if any
@@ -293,10 +358,11 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     this.end = (this.start += ins.length);
     // Marks the selection for restoration after rendering 
     this.marked = true;
+    return this;
   }
 
   /** Deletes the current selection (Del-like) */
-  public del() {
+  private del(): this {
     // Stores the current values in history
     this.store();
     // Whenevevr collapsed...
@@ -314,10 +380,11 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     this.end = this.start;
     // Marks the selection for restoration after rendering 
     this.marked = true;
+    return this;
   }
 
   /** Deletes the previous character (Backspace-like) */
-  public back() {
+  private back(): this {
     // Stores the current values in history
     this.store();
     // Whenevevr collapsed...
@@ -328,7 +395,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       this.start = this.prev(this.start);
     }
     // Deletes the selected block 
-    this.del();
+    return this.del();
   }
 
   /** Moves the given selection index ahead by one character */
@@ -353,7 +420,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   }
 
   /** Queries the current selection */
-  public query(): this {
+  private query(): this {
 
     try {
       // Gets the current document selection first
@@ -385,6 +452,9 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       const range = this.document.createRange();
       // Computes the node/offset pair
       const [node, offset] = this.range(this.start);
+
+      //window.alert(this.start + "," + offset);
+
       // Applies the pair to the range as a collapsed selection
       range.setStart(node, offset);
       range.setEnd(node, offset);
@@ -427,7 +497,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     // Case #1: The given node is a text node, meaning the dom selection is expressed as the text-node and the relative offset whithin such text. We keep the pair unchanged and move forward.
     if(node.nodeType !== Node.TEXT_NODE) {
       // Cases #2: The given node isn't a text node (likely is the host container element), meaning the dom selection is expressed as the containing node while the offseet is the index of the selected element.
-      
+
       // Ensures the given node has chilldren
       const count = node.childNodes.length;
       if(!count) { return 0; }
@@ -518,14 +588,15 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     return '';
   }
 
-  /***** HISTORY UNDO/REDO *****/
+  /********** HISTORY UNDO/REDO ***********/
+
   private store$ = new Subject<{ value: string, selection: [number, number] }>();
   private history: { value: string, selection: [number, number] }[];
   private timeIndex: number;
   private sub$: Subscription;
 
   /** Clears the history buffer */
-  public clearHistory(): this {
+  private clearHistory(): this {
     // Unsubscribe the previous subscription, if any
     if(!!this.sub$) { this.sub$.unsubscribe(); }
     // Initializes the history buffer
@@ -535,7 +606,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   }
 
   /** Initilizes the history buffer */
-  public enableHistory(debounce: number = 1000, limit: number = 128): this {
+  private enableHistory(debounce: number = 1000, limit: number = 128): this {
     // Clears the history buffer
     this.clearHistory();
     // Builts up the stream optimizing the amout of snapshot saved in the history 
@@ -569,23 +640,23 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
    * Storage will be performed conditionally to the time elapsed since 
    * the last modification otherwise.
   */
-  public store(force?: boolean): this { 
+  private store(force?: boolean): this { 
 
     if(!!force) {
       // Pushes a snapshot into the history buffer unconditionally
-      this.history.unshift({ value: this.value, selection: this.selection }); 
+      this.history.unshift({ value: this.value, selection: [this.start, this.end] }); 
       return this; 
     }
     // Pushes the document for conditional history save
-    this.store$.next({ value: this.value, selection: this.selection });
+    this.store$.next({ value: this.value, selection: [this.start, this.end] });
     return this; 
   }
  
   /** Returns true whenever the last modifications can be undone */
-  get undoable(): boolean { return this.history.length > 0 && this.timeIndex < this.history.length - (!!this.timeIndex ? 1 : 0); }
+  private get undoable(): boolean { return this.history.length > 0 && this.timeIndex < this.history.length - (!!this.timeIndex ? 1 : 0); }
 
   /** Undoes the latest changes. It requires enableHistory() to be called */
-  public undo(): this {
+  private undo(): this {
     // Stops undoing when history is finished
     if(!this.undoable) { return this; }
     // Saves the present moment to be restored eventually
@@ -597,10 +668,10 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   }
 
   /** Returns true whenever the last undone modifications can be redone */
-  get redoable(): boolean { return this.history.length > 0 && this.timeIndex > 0; }
+  private get redoable(): boolean { return this.history.length > 0 && this.timeIndex > 0; }
 
   /** Redoes the last undone modifications. It requires enableHistory() to be called */
-  public redo(): this {
+  private redo(): this {
     // Stops redoing when back to the present
     if(!this.redoable) { return this; }
     // Gets the previous snapshot from the history

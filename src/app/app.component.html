@@ -1,4 +1,5 @@
 
+
 <!-- Mode selection: Auto, Web and Native -->
 <mat-radio-group fxLayout="column" fxLayoutAlign="center end" fxLayoutGap="5px" labelPosition="before" [value]="mode" (change)="mode = $event.value">
   <!-- Auto: detects the native support and acts accordingly -->
@@ -14,27 +15,37 @@
 <section fxLayout="column" fxLayoutAlign="center center">
 
   <h1>Emoji Text</h1>
-  <p [wm-emoji-text]="text" [mode]="mode"></p>
+  <p [wm-emoji-text]="text" [mode]="mode" #message></p>
 
   <br>
 
-  <mat-form-field appearance="outline">
+  <!-- Emoji Input for the Web -->
+  <mat-form-field appearance="outline" *ngIf="message.behavior === 'web'">
     <mat-label>Emoji Input</mat-label>
-    <wm-emoji-input matEmoji [value]="text" [mode]="mode" newline="shift" placeholder="Type a message" (valueChange)="updateText($event)" #einput></wm-emoji-input>
+    <wm-emoji-input matEmoji [value]="text" mode="web" newline="shift" placeholder="Type a message" (valueChange)="updateText($event)" #einput></wm-emoji-input>
     <button mat-icon-button matSuffix><mat-icon>send</mat-icon></button>
     <mat-hint>Material Form Field applied to Emoji input</mat-hint>
   </mat-form-field>
+
+  <!-- Native Input for platforms supporting Emoji natively -->
+  <mat-form-field appearance="outline" *ngIf="message.behavior === 'native'">
+    <mat-label>Native Input</mat-label>
+    <!--input matInput [value]="text" placeholder="Type a message" (input)="updateText($event.target.value)" #einput /-->
+    <textarea matInput [value]="text" placeholder="Type a message" (input)="updateText($event.target.value)" cdkTextareaAutosize cdkAutosizeMinRows="1" #einput></textarea>
+    <button mat-icon-button matSuffix><mat-icon>send</mat-icon></button>
+    <mat-hint>Material Form Field applied to Native input</mat-hint>
+  </mat-form-field>
  
   <div fxLayout="row" style="user-select: none;"> 
-    <button mat-icon-button tabindex="-1" *ngFor="let key of keys" (mousedown)="einput.typein(key);false" style="font-size: 24px; line-height: 24px;">
+    <button mat-icon-button tabindex="-1" *ngFor="let key of keys" (mousedown)="typein(key);false" style="font-size: 24px; line-height: 24px;">
       <img [wm-emoji]="key" />
     </button>
   </div>
 
   <br>
 
-  <p> Emoji native: {{native}}</p>
-  <input [style.width]="'300px'" [value]="text" (input)="updateText($event.target.value)" />
+  <!--p> Emoji native: {{native}}</p>
+  <input [style.width]="'300px'" [value]="text" (input)="updateText($event.target.value)"/-->
   <p class="debug">{{ debug }}</p>
 
 </section>

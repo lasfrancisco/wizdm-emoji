@@ -6,6 +6,7 @@ import { TextFieldModule } from '@angular/cdk/text-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatButtonModule } from '@angular/material/button';
+import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { AppComponent } from './app.component';
 import { EmojiSupportModule } from './emoji-support';
@@ -23,6 +24,7 @@ import { EmojiMaterialModule } from './emoji-support/material';
     MatIconModule,
     MatRadioModule,
     MatButtonModule,
+    MatInputModule,
     MatFormFieldModule,
     EmojiSupportModule.init( { emojiPath: "https://cdn.jsdelivr.net/npm/emoji-datasource-google@5.0.1/img/google/64/" }),
     EmojiImageModule,

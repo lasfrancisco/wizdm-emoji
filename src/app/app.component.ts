@@ -1,5 +1,6 @@
 import { Component, OnInit, Inject, ViewChild, ElementRef } from '@angular/core';
 import { EmojiRegex, EmojiNative } from './emoji-support/utils';
+import { EmojiInput } from './emoji-support/input';
 //import emojiData from 'emoji-datasource-google/emoji.json';
 
 @Component({
@@ -10,11 +11,12 @@ import { EmojiRegex, EmojiNative } from './emoji-support/utils';
 })
 export class AppComponent { 
 
-  public text = "Playing with emoji \ud83d\ude03\u{1F976}\u{1F469}\u{1F3FB}\u200D\u{1F9B0} - \u{1F64F}\u{1F64F}\u{1F3FF}";
-  public debug: string;
-  public mode = 'auto';
-  
+  @ViewChild('einput') einput: EmojiInput|ElementRef<HTMLInputElement>;
 
+  public text = "Playing with emoji \ud83d\ude03\u{1F976}\u{1F469}\u{1F3FB}\u200D\u{1F9B0} - \u{1F64F}\u{1F64F}\u{1F3FF}";
+  public mode = 'auto';
+  public debug: string;
+ 
   readonly keys = ['😂', '👋🏻', '💕', '😈', '💣', '🚖', '🐵', '👩‍🦰', '🙏🏾'];
 
   constructor(@Inject(EmojiRegex) private regex: RegExp, @Inject(EmojiNative) readonly native: boolean) {
@@ -24,6 +26,15 @@ export class AppComponent {
 
   updateText(text: string) {
     this.debug = this.decode(this.text = text);
+  }
+
+  typein(key: string) {
+
+    const target = (this.einput instanceof ElementRef) ? this.einput.nativeElement : this.einput;
+    if(!target) { return; }
+
+    target.setRangeText(key, target.selectionStart, target.selectionEnd, 'end');
+    this.updateText(target.value);
   }
 
   private decode(text: string): string {
@@ -38,17 +49,5 @@ export class AppComponent {
 
       return decoded;
     }).replace(/\n/g, '\\u0013');
-  }
-
-  onLoad(ev: Event) {
-    console.log(ev);
-  }
-
-  onError(error: Error) {
-    console.error(error);
-  }
-
-  private popup(to: any) {
-    window.alert("Congratulation! You successfully tested navigation:\n" + to);
   }
 }
