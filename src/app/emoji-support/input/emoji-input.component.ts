@@ -409,32 +409,50 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     // Short-circuits for invalid nodes
     if(!node) { return 0; }
 
-    // Case #1: The given node is a text node.
-    // This means the dom selection is expressed as the text-node and the relative offset whithin such text
-    if(node && node.nodeType === Node.TEXT_NODE) {
-      // Computes the absolute offset from the matching segment
-      return this.abs(this.segments[ this.findIndex(node) ], offset );
+    // Case #1: The given node is a text node, meaning the dom selection is expressed as the text-node and the relative offset whithin such text. We keep the pair unchanged and move forward.
+    if(node.nodeType !== Node.TEXT_NODE) {
+
+      // Cases #2: The given node isn't a text node (likely is the host container element), meaning the dom selection is expressed as the containing node while the offseet is the index of the selected element.
+
+      // Ensures the given node has chilldren
+      const count = node.childNodes.length;
+      if(!count) { return 0; }
+
+      // Gets the selected child node (saturating to the last child) and resets the offset for the furtner calculations
+      node = node.childNodes.item(Math.min(offset, count-1));
+      offset = 0;
     }
 
-    // Cases #2/3: The given node is an Element (must be the host container)
-    // This means the dom selection is expressed as the containing node while the offseet is the index of 
-    // the selected element, so, gets the selected child node first (saturating to the last child)
-    node = node && node.childNodes.item(Math.min(offset, node.childNodes.length - 1));
+    // Loops on the nodes composing the rendered output
+    let child = this.element.firstChild; let text = ''; 
+    while(child) {
 
-    // Case #2: The selected child node is not an element (likely a comment)
-    if(node && node.nodeType !== Node.ELEMENT_NODE) {
-      // Walk back till the first element is found
-      while(node && node.nodeType !== Node.ELEMENT_NODE) {
-        node = node.previousSibling;
+      // When we match the requested node, we are done. The offset is calculated as the accumulated text length.
+      if(child == node) { return text.length + offset; } 
+
+      // Appends the text content depending on the node type
+      switch(child.nodeType) {
+
+        // Appends the text node value
+        case Node.TEXT_NODE:
+        text += child.nodeValue;
+        break;
+
+        // Appends the alt image element value
+        case Node.ELEMENT_NODE:
+        switch((child as Element).tagName) {
+
+          case 'IMG':
+          text += (child as HTMLImageElement).alt || '';
+          break;
+        }
       }
-      // When found, computes the absolute offset fromn the matching segment using its content's lenght as the offset
-      const segment = this.segments[this.findIndex(node)];
-      return this.abs(segment, segment && segment.content.length);
+
+      // Skips to the next node
+      child = child.nextSibling;
     }
 
-    // Case #3: The selected child node is an element (likely an image)
-    // Computes the absolute offset from the matching segment straight away
-    return this.abs(this.segments[this.findIndex(node)], 0);    
+    return 0;
   }
 
   /** Computes a Node/offset dom selection pair from an absolute offset */
@@ -486,24 +504,6 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
 
     // Case #4: The Mathing node (or its the next valid node) is an element, so, returns its position relative to the parent
     return [ this.element, count ];
-  }
-
-  /** Selection helper function. Returns the index of the segment currently representing the given dom node */
-  private findIndex(node: Node): number {
-    // Short-circuits for invalid nodes
-    if(!node || node.parentNode !== this.element) { return 0; }
-    // Walks back till reaching the very first container's node
-    let count = 0;
-    while(node && node !==  this.element.firstChild) { 
-      // Skips to the previous node
-      node = node.previousSibling; 
-      // Counts the valid node only
-      if(node && (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.ELEMENT_NODE)) {
-        count++;
-      }
-    }
-    // Returns the counting
-    return count;
   }
 
   /** Selection helper function: Computes teh absolute offset from the given segment and relative offset */
