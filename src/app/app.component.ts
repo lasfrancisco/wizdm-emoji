@@ -29,11 +29,13 @@ export class AppComponent {
     this.decoded = this.decode(this.text = text);
   }
 
-  typein(key: string) {
+  public typein(key: string) {
 
-    if(!this.typeinAdapter) { return; }
-
+    if(!this.typeinAdapter) { return false; }
+    // Types the key in the textarea/EmojiInput
     this.typeinAdapter.typein(key);
+    // Prevents the default behavior avoiding focus change
+    return false;
   }
 
   private decode(text: string): string {
