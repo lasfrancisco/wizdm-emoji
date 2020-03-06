@@ -9,7 +9,8 @@ export interface emSegment {
 @Component({
   selector: '[wm-emoji-text]',
   templateUrl: './emoji-text.component.html',
-  styleUrls: ['./emoji-text.component.scss']
+  styleUrls: ['./emoji-text.component.scss'],
+  host: { "class": "wm-emoji-text" }
 })
 export class EmojiText implements OnChanges {
 

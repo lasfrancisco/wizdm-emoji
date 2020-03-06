@@ -1,4 +1,4 @@
-import { Directive, OnChanges, SimpleChanges, Input, Output, EventEmitter, HostBinding, HostListener } from '@angular/core';
+import { Directive, Input, Output, EventEmitter, HostBinding, HostListener } from '@angular/core';
 import { EmojiUtils } from '../utils';
 
 // 1x1px transparent image placeholder
