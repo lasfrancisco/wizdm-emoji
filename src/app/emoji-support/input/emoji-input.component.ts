@@ -64,13 +64,10 @@ export class EmojiInput extends EmojiText implements OnDestroy {
   /** The input value */
   get value(): string { return super.value; }
   @Input() set value(value: string) {
-
     // Avoids unecessary changes
     if(value === this.value) { return; }
-
     // Restarts the undo history whenevevr the input value changes.
     this.enableHistory(this.historyTime, this.historyLimit); 
-    
     // Compiles the new text and emits the update
     this.compile( super.value = value );
   }
@@ -104,7 +101,7 @@ export class EmojiInput extends EmojiText implements OnDestroy {
   // Handles beforeinput event
   @HostListener('beforeinput', ['$event']) beforeInput(ev: InputEvent) { 
     // Divert the insertion content to the internal implementation
-    if(ev.data) { this.query().insert(ev.data); }
+    if(ev.data) { this.insert(ev.data); }
     // Prevents the default behavior
     return false;
   }
