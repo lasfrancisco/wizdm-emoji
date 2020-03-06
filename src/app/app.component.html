@@ -1,5 +1,4 @@
 
-
 <!-- Mode selection: Auto, Web and Native -->
 <mat-radio-group fxLayout="column" fxLayoutAlign="center end" fxLayoutGap="5px" labelPosition="before" [value]="mode" (change)="mode = $event.value">
   <!-- Auto: detects the native support and acts accordingly -->
@@ -22,16 +21,16 @@
   <!-- Emoji Input for the Web -->
   <mat-form-field appearance="outline" *ngIf="message.behavior === 'web'">
     <mat-label>Emoji Input</mat-label>
-    <wm-emoji-input matEmoji [value]="text" mode="web" newline="shift" placeholder="Type a message" (valueChange)="updateText($event)" #einput></wm-emoji-input>
+    <wm-emoji-input matEmoji typein [value]="text" mode="web" newline="shift" placeholder="Type a message" (valueChange)="updateText($event)"></wm-emoji-input>
     <button mat-icon-button matSuffix><mat-icon>send</mat-icon></button>
-    <mat-hint>Material Form Field applied to Emoji input</mat-hint>
+    <mat-hint>Material Form Field applied to Emoji Input</mat-hint>
   </mat-form-field>
 
   <!-- Native Input for platforms supporting Emoji natively -->
   <mat-form-field appearance="outline" *ngIf="message.behavior === 'native'">
     <mat-label>Native Input</mat-label>
     <!--input matInput [value]="text" placeholder="Type a message" (input)="updateText($event.target.value)" #einput /-->
-    <textarea matInput [value]="text" placeholder="Type a message" (input)="updateText($event.target.value)" cdkTextareaAutosize cdkAutosizeMinRows="1" #einput></textarea>
+    <textarea matInput typein [value]="text" placeholder="Type a message" (valueChange)="updateText($event)" cdkTextareaAutosize cdkAutosizeMinRows="1"></textarea>
     <button mat-icon-button matSuffix><mat-icon>send</mat-icon></button>
     <mat-hint>Material Form Field applied to Native input</mat-hint>
   </mat-form-field>
@@ -47,6 +46,6 @@
 
   <!--p> Emoji native: {{native}}</p>
   <input [style.width]="'300px'" [value]="text" (input)="updateText($event.target.value)"/-->
-  <p class="debug">{{ debug }}</p>
+  <p class="debug">{{ decoded }}</p>
 
 </section>

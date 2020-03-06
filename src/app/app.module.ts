@@ -14,6 +14,7 @@ import { EmojiImageModule } from './emoji-support/image';
 import { EmojiTextModule } from './emoji-support/text';
 import { EmojiInputModule } from './emoji-support/input';
 import { EmojiMaterialModule } from './emoji-support/material';
+import { TypeinAdapter } from './typein-adapter.directive';
 
 @NgModule({
   imports:      [   
@@ -34,7 +35,7 @@ import { EmojiMaterialModule } from './emoji-support/material';
   ],
   
   declarations: [ 
-    AppComponent
+    AppComponent, TypeinAdapter
   ],
 
   providers: [],

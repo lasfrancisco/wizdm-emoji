@@ -1,6 +1,7 @@
 import { Component, OnInit, Inject, ViewChild, ElementRef } from '@angular/core';
 import { EmojiRegex, EmojiNative } from './emoji-support/utils';
 import { EmojiInput } from './emoji-support/input';
+import { TypeinAdapter } from './typein-adapter.directive';
 //import emojiData from 'emoji-datasource-google/emoji.json';
 
 @Component({
@@ -11,11 +12,11 @@ import { EmojiInput } from './emoji-support/input';
 })
 export class AppComponent { 
 
-  @ViewChild('einput') einput: EmojiInput|ElementRef<HTMLInputElement>;
+  @ViewChild(TypeinAdapter) typeinAdapter: TypeinAdapter;
 
   public text = "Playing with emoji \ud83d\ude03\u{1F976}\u{1F469}\u{1F3FB}\u200D\u{1F9B0} - \u{1F64F}\u{1F64F}\u{1F3FF}";
   public mode = 'auto';
-  public debug: string;
+  public decoded: string;
  
   readonly keys = ['😂', '👋🏻', '💕', '😈', '💣', '🚖', '🐵', '👩‍🦰', '🙏🏾'];
 
@@ -25,16 +26,14 @@ export class AppComponent {
   }
 
   updateText(text: string) {
-    this.debug = this.decode(this.text = text);
+    this.decoded = this.decode(this.text = text);
   }
 
   typein(key: string) {
 
-    const target = (this.einput instanceof ElementRef) ? this.einput.nativeElement : this.einput;
-    if(!target) { return; }
+    if(!this.typeinAdapter) { return; }
 
-    target.setRangeText(key, target.selectionStart, target.selectionEnd, 'end');
-    this.updateText(target.value);
+    this.typeinAdapter.typein(key);
   }
 
   private decode(text: string): string {

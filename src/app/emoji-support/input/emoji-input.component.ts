@@ -1,9 +1,8 @@
-import { Component, Input, Output, EventEmitter, AfterViewChecked, OnChanges, OnDestroy } from '@angular/core';
-import { HostBinding, HostListener, Inject, ElementRef, ViewEncapsulation, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnDestroy, HostBinding, HostListener, Inject, ElementRef, ViewEncapsulation, NgZone } from '@angular/core';
 import { coerceBooleanProperty } from '@angular/cdk/coercion';
-import { filter, map, timeInterval } from 'rxjs/operators';
+import { filter, map, timeInterval, first } from 'rxjs/operators';
 import { EmojiText, emSegment } from '../text';
-import { Subject, Subscription } from 'rxjs';
+import { Subject, Subscription, animationFrameScheduler } from 'rxjs';
 import { DOCUMENT } from '@angular/common';
 import { EmojiUtils } from '../utils';
 
@@ -14,37 +13,39 @@ import { EmojiUtils } from '../utils';
   encapsulation: ViewEncapsulation.None,
   host: { "class": "wm-emoji-input" }
 })
-export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges, OnDestroy {
+export class EmojiInput extends EmojiText implements OnDestroy {
 
   // Current selection
   private start: number;
   private end: number;
-  private marked: boolean;
 
-  constructor(@Inject(DOCUMENT) private document: Document, private root: ElementRef<HTMLElement>, utils: EmojiUtils) {
+  constructor(@Inject(DOCUMENT) private document: Document, private elref: ElementRef<HTMLElement>, private zone: NgZone, utils: EmojiUtils) {
     super(utils);
   }
 
   /** True whenever the curernt selection is collapsed in a cursor */
-  public get collapsed(): boolean {
-    return this.start === this.end;
-  }
+  public get collapsed(): boolean { return this.start === this.end; }
 
   /** Input's HTMLElement */
-  public get element(): HTMLElement {
-    return this.root.nativeElement;
-  }
+  public get element(): HTMLElement { return this.elref.nativeElement; }
+
+  /** The Document's Selection object */
+  private get selection(): Selection { return this.document.getSelection(); }
 
   /** The Window object */
-  private get window(): Window {
-    return this.document.defaultView;
-  }
+  private get window(): Window { return this.document.defaultView; }
 
   /** True whenever the platform is Mac, iPhone or iPad */
-  private get mac(): boolean {
-    const window = this.document.defaultView;
-    return /Mac|^iP/.test(window.navigator.platform);
-  }
+  private get mac(): boolean { return /Mac|^iP/.test(this.window.navigator.platform); }
+
+  /** True whenever this input has focus */
+  public get focused(): boolean { return this.document.activeElement === this.element; }
+
+  /** Sets the focus on the input's element */
+  public focus() { this.element.focus(); }
+
+  /** Removes focus from the input's element; keystrokes will subsequently go nowhere. */
+  public blur() { this.element.blur(); }
 
   // Applies the contentediable attribute unless the input is disabled
   @HostBinding('attr.contenteditable') get editable() { 
@@ -64,18 +65,21 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   get value(): string { return super.value; }
   @Input() set value(value: string) {
 
-    // Restarts the undo history whenevevr the input value changes. This test avoids unwanted resets when using bi-directional binding as well
-    if(value !== super.value) { 
-      this.enableHistory(this.historyTime, this.historyLimit); 
-    }
-    // Applies the new input value ihnerited by EmojiText
-    this.updateValue(value);
+    // Avoids unecessary changes
+    if(value === this.value) { return; }
+
+    // Restarts the undo history whenevevr the input value changes.
+    this.enableHistory(this.historyTime, this.historyLimit); 
+    
+    // Compiles the new text and emits the update
+    this.compile( super.value = value );
   }
 
-  private updateValue(value: string) {
-    // Emits the updated source text
-    return this.valueChange.emit(super.value = value), value;
-  }
+  // Clears the history while leaving 
+  public ngOnDestroy() { this.clearHistory(); }
+
+   /** Emits the new text on changes */
+  @Output() valueChange = new EventEmitter<string>();
   
   /** Disables the input */
   @Input('disabled') set disableInput(value: boolean) { this.disabled = coerceBooleanProperty(value); }
@@ -97,9 +101,6 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   /** Undo history limits */
   @Input() historyLimit: number = 128;
 
-  /** Emits the new text on changes */
-  @Output() valueChange = new EventEmitter<string>();
-
   // Handles beforeinput event
   @HostListener('beforeinput', ['$event']) beforeInput(ev: InputEvent) { 
     // Divert the insertion content to the internal implementation
@@ -108,23 +109,8 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     return false;
   }
 
-  // Handles mouseup event
-  @HostListener('mouseup', ['$event']) onMouseUp(ev: MouseEvent) {
-    // Query for the current selection
-    this.query();
-  }
-
-    // Handles mouseup event
-  @HostListener('mousedown', ['$event']) onMouseDown(ev: MouseEvent) {
-    // Query for the current selection
-    this.query();
-  }
-
   // Handles keydown event
   @HostListener('keydown', ['$event']) keyDown(ev: KeyboardEvent) {
-
-    // Query for the current selection
-    this.query();
 
     switch(ev.key) {
 
@@ -139,7 +125,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       
       // Deletes back
       case 'Backspace':
-      this.back(); break;
+      this.backspace(); break;
 
       // Insert a newline according to the newline input mode
       case 'Enter': if(this.newline === 'always' || (this.newline === 'shift' && ev.shiftKey)) { 
@@ -204,7 +190,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     const cp = ev.clipboardData || (this.window as any).clipboardData;
     if(!cp) { return true; }
     // Copies the selected text
-    try { cp.setData('text', this.value.slice(this.start, this.end) ); }
+    try { cp.setData('text', this.query().value.slice(this.start, this.end) ); }
     catch(e) { /*console.error(e);*/ }
     // Prevents default
     return false;
@@ -222,149 +208,29 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     return false;
   }
 
-  // Intercepts new renderings
-  public ngAfterViewChecked() {
-    // Applies the current selection to the document when needed. This is essential even when the selection
-    // isn't modified since view changes (aka rendering) affects the selection that requires to be restored
-    if(this.marked) {
-      // Uses a promise to postpone the action after all teh current micro-tasks completed
-      Promise.resolve().then( () => {
-        // Emits the updated source text
-        //this.valueChange.emit(this.value);
-        // Makes sure to restore the selection after the view has been rendered but anyhow well before
-        // the next change will be applied to the data tree (such as while typing) 
-        this.apply();
-        // Resets the flag after the update 
-        this.marked = false; 
-      });
-    }
-  }
-
-  // Intercepts inpu changes
-  public ngOnChanges(changes: SimpleChanges) {
-    // Restarts the undo history (this resets teh buffer too)
-    if(changes.historyTime || changes.historyLimit) {
-      this.enableHistory(this.historyTime, this.historyLimit);
-    }
-    // Compiles the input text into segmetns to be rendered by the base class
-    (changes.value || changes.mode) && this.compile(this.value);
-  }
-
-  // Clears the history while leaving 
-  public ngOnDestroy() { this.clearHistory(); }
-
-  /********** HTMLInputElement compatibility features ***********/
-
-  /** Returns / Sets the beginning index of the selected text. */
-  public get selectionStart(): number { return this.start; }
-  public set selectionStart(start: number) { this.start = start; this.marked = true; }
-
-  public get selectionEnd(): number { return this.end; }
-  public set selectionEnd(end: number) { this.end = end; this.marked = true; }
-
-  public get selectionDirection(): 'forward'|'backward'|'none' { return 'none'; }
-  public set selectionDirection(dir: 'forward'|'backward'|'none') {}
-
-  /** True whenever this input has focus */
-  public get focused(): boolean { 
-    return this.document.activeElement === this.element; 
-  }
-
-  /** Sets the focus on the input's element */
-  public focus() { this.element.focus(); }
-
-  /** Removes focus from the input's element; keystrokes will subsequently go nowhere. */
-  public blur() { this.element.blur(); }
-
-  /** Selects all the text in the input element, and focuses it so the user can subsequently replace all of its content.  */
-  public select() { this.setSelectionRange(0, this.value.length - 1); this.focus(); }
-
-  /** Selects a range of text in the input element (but does not focus it).  */
-  public setSelectionRange(start: number, end: number, dir?: 'forward'|'backward'|'none') {
-
-    switch(dir || 'none') {
-
-      case 'forward':
-      this.start = Math.min(start, end);
-      this.end = Math.max(start, end);
-      break;
-
-      case 'backward':
-      this.start = Math.max(start, end);
-      this.end = Math.min(start, end);
-      break;
-
-      case 'none': default:
-      this.start = start;
-      this.end = end;
-    }
-
-    this.marked = true;
-  }
-
-  /** Replaces a range of text in the input with a new string. */
-  public setRangeText(replacement: string, start?: number, end?: number, selectMode?: 'select'|'start'|'end'|'preserve') {
-
-    // Applies the requested selection whenever defined
-    if(typeof start !== 'undefined') { this.start = start; }
-    if(typeof end !== 'undefined') { this.end = end; }
-
-    // Backs-up the selection
-    const sel = [ this.start, this.end ];
-
-    // Replaces the text at the current selection
-    this.insert(replacement);
-
-    // Restores the selection according to the requested mode
-    switch(selectMode || 'start') {
-
-      case 'start':
-      this.start = this.end = sel[0];
-      break;
-
-      case 'select':
-      this.end = (this.start = sel[0]) + (replacement || '').length;
-      break;
-
-      case 'preserve':
-      [ this.start, this.end ] = sel;
-      break;
-
-      case 'end': default:
-      // Do nothing - this.start = this.end = sel[0] + (replacement || '').length;
-    }
-  }
-
-  /********** INTERNALS ***********/
-
   /** Compiles the input text into segment accounting for multiple lines */
   protected compile(source: string): number {
     // Appends an extra '\n' forcing the browser displaying a new line normally omitted when at the end
-    // On native behavior this just adds an extra char to render while on web behavior dds an extra segment
     return super.compile(source + (source && source.endsWith('\n') ? '\n' : ''));
   }
 
+  /** Wait for the current queue of microtaks to be emptied. The async funtion will than be called after the rendering completed */
+  private whenDone(async: () => void) { 
+    return this.zone.onStable.pipe( first() ).subscribe(() => async() ); 
+  }
+
   /** Insert a new text at the current cursor position */
-  private insert(ins: string): this {
+  public insert(key: string): this {
+    // Skips empty insertions when unfruitful
+    if(!key && this.collapsed) { return this; }
     // Stores the current values in history
-    this.store();
-    // Deletes the selection, if any
-    if(!this.collapsed) { this.del(); }
-    // Insert the new text at the current position  
-    const text = this.value.slice(0, this.start) + ins + this.value.slice(this.start);
-    // Updates the source and compiles the segment for rendering 
-    this.compile(this.updateValue(text));
-    // Updates the cursor position
-    this.end = (this.start += ins.length);
-    // Marks the selection for restoration after rendering 
-    this.marked = true;
-    return this;
+    return this.query().store().ins(key);
   }
 
   /** Deletes the current selection (Del-like) */
   private del(): this {
     // Stores the current values in history
-    this.store();
+    this.query().store();
     // Whenevevr collapsed...
     if(this.collapsed){
       // Skips when at the end of the text
@@ -373,20 +239,13 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       this.end = this.next(this.end);
     } 
     // Removes the selected text
-    const text = this.value.slice(0, this.start) + this.value.slice(this.end);
-    // Updates the source and compiles the segment for rendering 
-    this.compile(this.updateValue(text));
-    // Collapses the selection
-    this.end = this.start;
-    // Marks the selection for restoration after rendering 
-    this.marked = true;
-    return this;
+    return this.ins('');
   }
 
   /** Deletes the previous character (Backspace-like) */
-  private back(): this {
+  public backspace(): this {
     // Stores the current values in history
-    this.store();
+    this.query().store();
     // Whenevevr collapsed...
     if(this.collapsed) {
       // Skips when at the start of the text
@@ -395,7 +254,23 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       this.start = this.prev(this.start);
     }
     // Deletes the selected block 
-    return this.del();
+    return this.ins('');
+  }
+
+  /** Internal insertion/deletion helper */
+  private ins(key: string): this {
+    // Insert the new text replacing the current selection  
+    const text = this.value.slice(0, this.start) + key + this.value.slice(this.end);
+    // Updates the source and compiles the segment for rendering 
+    this.compile(super.value = text);
+    // Updates the cursor position
+    this.end = (this.start += key.length);
+    // Applies the selection back when rendering is done
+    this.whenDone( () => this.apply() );
+    // Emits the ne value
+    this.valueChange.emit(this.value);
+    // Return this for chaining purposes
+    return this;
   }
 
   /** Moves the given selection index ahead by one character */
@@ -415,7 +290,6 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
     while((next = this.next(next)) < pos) {
       offset = next;
     }
-
     return offset;
   }
 
@@ -423,45 +297,38 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   private query(): this {
 
     try {
-      // Gets the current document selection first
-      const sel = this.document.getSelection();
-      // Gets the first range, if any
-      const range = (!!sel && sel.rangeCount > 0) && sel.getRangeAt(0);
-      if(range) {
-        // Computes the start offset
-        this.start = this.offset(range.startContainer, range.startOffset);
-        // Computes the end offset
-        this.end = range.collapsed ? this.start : this.offset(range.endContainer, range.endOffset);
-      }
-      else { this.start = this.end = 0; }
+       // Gets the current document selection first
+      const sel = this.selection;
+      // Computes the start offset from the anchor node
+      this.start = this.offset(sel.anchorNode, sel.anchorOffset);
+      // Computes the end offset from the focus node
+      this.end = sel.isCollapsed ? this.start : this.offset(sel.focusNode, sel.focusOffset);
+      // Sorts the edges
+      if(this.start > this.end) { const tmp = this.start; this.start = this.end; this.end = tmp; }
     }
     catch(e) { this.start = this.end = 0; /*console.error(e);*/ }
     // Returns this for chaining purposes
     return this;
   }
 
-  /** Restores the current selection back to the dom assuming the selection is now collapsed into a cursor */ 
+  /** Applies the current selection back to the dom */
   private apply(): this {
 
     try {
-      // Gets the document selection object first
-      const sel = this.document.getSelection();
-      // Clears the current documetn selection
-      sel.removeAllRanges();
-      // Creates a new range
-      const range = this.document.createRange();
-      // Computes the node/offset pair
+      // Gets the current document selection first
+      const sel = this.selection;
+      // Computes the dom node/offset selection pair for the start offset only
       const [node, offset] = this.range(this.start);
-
-      //window.alert(this.start + "," + offset);
-
-      // Applies the pair to the range as a collapsed selection
-      range.setStart(node, offset);
-      range.setEnd(node, offset);
-      // Updated the docuemtn selection
-      sel.addRange(range);
+      // Applies the selection as a collapsed cursor
+      sel.collapse(node, offset);
+      // Check for the seleciton to be applied correctly...
+      if(sel.anchorNode !== node || sel.anchorOffset !== offset) { 
+        // ...otherwise schedule a second attempt during the next animation frame update to cope with
+        // browsers (Safari) requiring the dome to be actually rendered for the selection to work
+        animationFrameScheduler.schedule( () => this.apply() ); 
+      }
     }
-    catch(e) {}
+    catch(e) { /*console.error(e);*/ }
     // Returns this for chaining purposes
     return this;
   }
@@ -471,7 +338,7 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
 
     // Updates the current cursor position based on the emoji image the user clicked onto
     this.start = this.end = this.abs(segment, at === 'right' ? segment.content.length : 0);
-    this.marked = true;
+    this.selection.collapse(...this.range(this.start));
   }
 
   /** Selection helper function: Computes the absolute offset from the given segment and relative offset */
@@ -530,7 +397,17 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       // Gets the node text content, if any 
       const text = this.nodeText(node);
       // When the offset fits within the node we are done
-      if(offset <= text.length) { break; }
+      if(offset <= text.length) { 
+
+         // Case #1: When the matching node is a text node...
+        if(node.nodeType === Node.TEXT_NODE) {
+          // Returns the text node kind of selection with the content based offset
+          return [ node, offset ];
+        }
+
+        // Case #2: We must be at the IMG, so, return the element offset instead
+        return [ this.element, count + 1 ];
+      }
       // Decreses the absolute offset
       offset -= text.length;
       // Counts the number of child nodes otherwise (including comments)
@@ -539,31 +416,8 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
       node = node.nextSibling;
     }
 
-    // Case #1: When no matching node is found, returns a 0 based index
-    if(!node) { return [ this.element, 0 ]; }
-
-    // Case #2: When the matching node is a text node...
-    if(node.nodeType === Node.TEXT_NODE) {
-      // Returns the text node kind of selection with the content based offset
-      return [ node, offset ];
-    }
-    
-    // Case #3/4: The matching node is not a text. An offset means the next node must be selected 
-    if(offset > 0) { 
-
-      // Seeks for the next valid node 
-      do { count++; node = node.nextSibling; }
-      while(node && node.nodeType !== Node.TEXT_NODE && node.nodeType !== Node.ELEMENT_NODE) ;
-
-      // Case #3: The next node is a text node
-      if(node && node.nodeType === Node.TEXT_NODE) {
-        // Returns the starting position of the text node itself 
-        return [ node, 0 ];
-       }
-    }
-
-    // Case #4: The Mathing node (or its the next valid node) is an element, so, returns its position relative to the parent
-    return [ this.element, count ];
+    // Case #3: No matches found, return a zero based offset
+    return [ this.element, 0 ]
   }
 
   /** Returns the text associated with the given node */
@@ -683,11 +537,16 @@ export class EmojiInput extends EmojiText implements AfterViewChecked, OnChanges
   }
 
   /** Restores the input content fromn the given history record */
-  private restore(snapshot: { value: string, selection: [number, number] }): this {
-
-    this.compile(this.updateValue(snapshot.value));
-    [this.start, this.end] = snapshot.selection;
-    this.marked = true;
+  private restore({ value, selection }: { value: string, selection: [number, number] }): this {
+    // Restores the selection
+    [ this.start, this.end ] = selection;
+    // Restores the content
+    this.compile(super.value = value);
+    // Applies the selection back when rendering is done
+    this.whenDone( () => this.apply() );
+    // Emits the ne value
+    this.valueChange.emit(this.value);
+    // Returns this for chaining purposes
     return this;
   }
 }
