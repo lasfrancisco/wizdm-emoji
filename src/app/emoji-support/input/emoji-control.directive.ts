@@ -23,7 +23,7 @@ export class EmojiControl implements OnDestroy, ControlValueAccessor {
 
   constructor(readonly input: EmojiInput) { 
     // Creates an observable from the input's element blur event for further use 
-    this.blur$ = fromEvent(input.element, 'blur').pipe( takeUntil<void>(this.dispose$) );
+    this.blur$ = fromEvent<void>(input.element, 'blur').pipe( takeUntil(this.dispose$) );
     // Creates an observable from the input valueChange event for further use 
     this.change$ = input.valueChange.pipe( takeUntil(this.dispose$) );
   }
