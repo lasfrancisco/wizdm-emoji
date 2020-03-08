@@ -15,6 +15,7 @@ import { EmojiTextModule } from './emoji-support/text';
 import { EmojiInputModule } from './emoji-support/input';
 import { EmojiMaterialModule } from './emoji-support/material';
 import { TypeinAdapter } from './typein-adapter.directive';
+import { EmojiKeyboardComponent } from './emoji-keyboard/emoji-keyboard.component';
 
 @NgModule({
   imports:      [   
@@ -35,7 +36,7 @@ import { TypeinAdapter } from './typein-adapter.directive';
   ],
   
   declarations: [ 
-    AppComponent, TypeinAdapter
+    AppComponent, TypeinAdapter, EmojiKeyboardComponent
   ],
 
   providers: [],
